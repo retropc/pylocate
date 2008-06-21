@@ -1,4 +1,4 @@
-def dpermutate(x, i=[3]):
+def dpermutate(x, i=[1,2,3]):
   o = []
   for y in i:
     o.extend(permutations(x, y))

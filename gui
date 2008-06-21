@@ -28,7 +28,7 @@ class PyIndexGUI:
 
     cell = gtk.CellRendererText()
     col = gtk.TreeViewColumn("Filename")
-    col.pack_start(cell)
+    col.pack_start(cell, True)
     col.set_attributes(cell, text=0)
     t.append_column(col)
 

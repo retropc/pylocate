@@ -53,7 +53,11 @@ class Index:
       self.__index.setdefault(p, []).append(l)
 
   def __lookup(self, key):
-    p = util.permutations(key, 3)
+    xlen = len(key)
+    if xlen > 3:
+      xlen = 3
+      
+    p = util.permutations(key, xlen)
     if not p:
       return []
     return self.__index.get(p[0], [])
