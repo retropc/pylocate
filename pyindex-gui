@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 import gtk, os, sys
 from index import Index
 
