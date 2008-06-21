@@ -1,0 +1,45 @@
+<?xml version="1.0" ?><!--Generated with glade3 3.4.5 on Sat Jun 21 21:17:20 2008 --><interface>
+  <object class="GtkWindow" id="window">
+    <property name="title" translatable="yes">PyIndex</property>
+    <property name="window_position">GTK_WIN_POS_CENTER</property>
+    <property name="default_width">600</property>
+    <property name="default_height">370</property>
+    <signal handler="on_window_key_press_event" name="key_press_event"/>
+    <signal handler="on_window_destroy" name="destroy"/>
+    <child>
+      <object class="GtkVBox" id="vbox1">
+        <property name="visible">True</property>
+        <child>
+          <object class="GtkEntry" id="search">
+            <property name="visible">True</property>
+            <property name="can_focus">True</property>
+            <signal handler="on_search_changed" name="changed"/>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkScrolledWindow" id="scrolledwindow1">
+            <property name="visible">True</property>
+            <property name="can_focus">True</property>
+            <property name="hscrollbar_policy">GTK_POLICY_AUTOMATIC</property>
+            <property name="vscrollbar_policy">GTK_POLICY_AUTOMATIC</property>
+            <child>
+              <object class="GtkTreeView" id="results">
+                <property name="visible">True</property>
+                <property name="can_focus">True</property>
+                <property name="headers_visible">False</property>
+                <property name="headers_clickable">True</property>
+                <signal handler="on_results_row_activated" name="row_activated"/>
+              </object>
+            </child>
+          </object>
+          <packing>
+            <property name="position">1</property>
+          </packing>
+        </child>
+      </object>
+    </child>
+  </object>
+</interface>
