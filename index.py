@@ -1,9 +1,75 @@
 import os, util, marshal, zlib, struct
 
+NOT_PRESENT = 2**32-1
 TABLE_SIZE = 1024
 
 def hash(x):
   return zlib.crc32(x)
+
+class MDataStructure:
+  def __init__(self, m, offset=0):
+    self._m = m
+    self._offset = offset
+
+  def _ri(self, x):
+    s = self._offset + x * 4
+    return struct.unpack("!L", self._m[s:s+4])
+
+class MHashTable:
+  def __init__(self, m, offset, size):
+    MDataStructure.__init__(self, m, offset)
+    self.__size = size
+
+  def __getitem__(self, key):
+    h = hash(key) % self.__size
+    return self._ri(h)
+
+class MFixedList:
+  def __init__(self, m, offset):
+    MDataStructure.__init__(self, m)
+    self.__m = m
+    self.__offset = offset
+
+  def __getitem__(self, index):
+    return self._ri(index)
+
+class MChainedHashTable:
+  def __init__(self, m, (hoffset, hsize), (coffset, )):
+    MDataStructure.__init__(self, m)
+    self.__table = MHashTable(m, hoffset, hsize)
+    self.__chains = MFixedList(m, coffset)
+
+  def __getitem__(self, key):
+    x = self.__table[key]
+    if x == NOT_PRESENT:
+      return None
+
+    while True:
+      x2 = self.__chains[x]
+      x = x + 1 
+      if x2 == NOT_PRESENT:
+        break
+      return x2
+#      yield x2
+
+class MStringList(MDataStructure):
+  def __init__(self, m, offset):
+    MDataStructure.__init__(self, m, offset)
+    self.__length = self._ri(0)
+    self.__totallength = self._ri(1)
+    self.__index = MFixedList(m, offset + 8)
+    self.__stringoffset = (2 + self.__length) * 4
+
+  def __getitem__(self, index):
+    stringpos = self.__index[index]
+    if index == self.__length - 1:
+      nextstringpos = self.__totallength
+    else:
+      nextstringpos = self.__index[index + 1]
+
+    stringlen = nextstringpos - stringpos
+    spos = self._offset + self.__stringoffset
+    return self.__m[spos:spos+stringlen]
 
 class Index:
   def __init__(self):
