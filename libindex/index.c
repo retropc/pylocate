@@ -237,7 +237,7 @@ static void fstringlist_load(struct fstringlist *s, char *m) {
   s->values = m + (2 + s->size) * sizeof(findex_e);
 }
 
-static char *fstringlist_get(struct fstringlist *s, const findex_e index, findex_e *len) {
+static char *fstringlist_get(struct fstringlist *s, const findex_e index, size_t *len) {
   findex_e startpos, endpos;
 
   MIntCpy(endpos, s->index, index);
