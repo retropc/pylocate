@@ -1,19 +1,26 @@
-import os, util, marshal
+import os, util, marshal, zlib, struct
+
+TABLE_SIZE = 1024
+
+def hash(x):
+  return zlib.crc32(x)
 
 class Index:
   def __init__(self):
     pass
 
 class WriteIndex(Index):
-  def __init__(self):
+  def __init__(self, tablesize=TABLE_SIZE):
     Index.__init__(self)
     self.__pathdict = {}
     self.__filedict = {}
     self.__pathlist = []
     self.__filelist = []
-    self.__index = {}
+    self.__index = [None] * tablesize
     self.__datalist = []
     self.metadata = {}
+    self.__tablesize = tablesize
+    self.metadata["tablesize"] = tablesize
 
   def dump(self, f):
     marshal.dump([self.metadata, self.__index, self.__pathlist, self.__filelist, self.__datalist], f)
@@ -37,13 +44,19 @@ class WriteIndex(Index):
     l = len(self.__datalist) - 1
 
     for p in util.dpermutate(lcfile):
-      self.__index.setdefault(p, []).append(l)
+      h = hash(p) % self.__tablesize
+      x = self.__index[h]
+      if x is None:
+        self.__index[h] = [l]
+      else:
+        x.append(l)
 
 class ReadIndex(Index):
   def __init__(self, f):
     Index.__init__(self)
     self.metadata, self.__index, self.__pathlist, self.__filelist, self.__datalist = marshal.load(f)
     self.__open = True
+    self.__tablesize = self.metadata["tablesize"]
 
   def __lookup(self, key):
     xlen = len(key)
@@ -53,7 +66,10 @@ class ReadIndex(Index):
     p = util.permutations(key, xlen)
     if not p:
       return []
-    return self.__index.get(p[0], [])
+    x = self.__index[hash(p[0]) % self.__tablesize]
+    if x is None:
+      return []
+    return x
 
   def __getitem__(self, key):
     key = key.lower()
