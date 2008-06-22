@@ -1,7 +1,7 @@
-import os, util, marshal, zlib, struct
+import os, util, marshal, zlib, struct, mmap
 
 NOT_PRESENT = 2**32-1
-TABLE_SIZE = 1024
+TABLE_SIZE = 128
 
 def hash(x):
   return zlib.crc32(x)
@@ -12,64 +12,128 @@ class MDataStructure:
     self._offset = offset
 
   def _ri(self, x):
-    s = self._offset + x * 4
-    return struct.unpack("!L", self._m[s:s+4])
+    s = self._offset + x*4
+    return struct.unpack("!L", self._m[s:s+4])[0]
 
-class MHashTable:
+  def _di(self, x):
+    s = self._offset + x
+    return struct.unpack("!L", self._m[s:s+4])[0]
+
+class MFixedList(MDataStructure):
+  def __getitem__(self, x):
+    return self._ri(x)
+
+  def __iter__(self):
+    i = 0
+    while True:
+      x = self._ri(i)
+      if x == NOT_PRESENT:
+        break
+      i = i + 1
+      yield x
+
+class MDataList(MFixedList):
+  def __getitem__(self, x):
+    y = x * 2
+    return MFixedList.__getitem__(self, y), MFixedList.__getitem__(self, y + 1)
+
+  def __iter__(self):
+    x = MFixedList.__iter__(self)
+    while True:
+      try:
+        l = x.next()
+      except StopIteration:
+        return
+      yield l, x.next()
+
+class MHashTable(MDataStructure):
   def __init__(self, m, offset, size):
     MDataStructure.__init__(self, m, offset)
     self.__size = size
+
+  def get(self, x):
+    return self._ri(x)
 
   def __getitem__(self, key):
     h = hash(key) % self.__size
     return self._ri(h)
 
-class MFixedList:
-  def __init__(self, m, offset):
-    MDataStructure.__init__(self, m)
-    self.__m = m
-    self.__offset = offset
-
-  def __getitem__(self, index):
-    return self._ri(index)
-
-class MChainedHashTable:
-  def __init__(self, m, (hoffset, hsize), (coffset, )):
-    MDataStructure.__init__(self, m)
-    self.__table = MHashTable(m, hoffset, hsize)
-    self.__chains = MFixedList(m, coffset)
+class MChainedHashTable(MDataStructure):
+  def __init__(self, m, offset, size):
+    MDataStructure.__init__(self, m, offset)
+    self.__table = MHashTable(m, offset, size)
+    self.__chainstart = self._offset + size * 4
 
   def __getitem__(self, key):
     x = self.__table[key]
     if x == NOT_PRESENT:
-      return None
+      return
 
-    while True:
-      x2 = self.__chains[x]
-      x = x + 1 
-      if x2 == NOT_PRESENT:
-        break
-      return x2
-#      yield x2
+    return MFixedList(self._m, self.__chainstart + x * 4)
+
+  def get(self, x):
+    x = self.__table.get(x)
+    if x == NOT_PRESENT:
+      return
+    return MFixedList(self._m, self.__chainstart + x * 4)
 
 class MStringList(MDataStructure):
   def __init__(self, m, offset):
     MDataStructure.__init__(self, m, offset)
     self.__length = self._ri(0)
-    self.__totallength = self._ri(1)
-    self.__index = MFixedList(m, offset + 8)
-    self.__stringoffset = (2 + self.__length) * 4
+    self.__index = MFixedList(m, offset + 4)
+    self.__stringoffset = offset + (2 + self.__length) * 4
 
   def __getitem__(self, index):
-    stringpos = self.__index[index]
-    if index == self.__length - 1:
-      nextstringpos = self.__totallength
+    stringendpos = self.__index[index]
+    if index == 0:
+      stringstartpos = 0
     else:
-      nextstringpos = self.__index[index + 1]
+      stringstartpos = self.__index[index - 1]
 
-    stringlen = nextstringpos - stringpos
-    spos = self._offset + self.__stringoffset
-    return self.__m[spos:spos+stringlen]
+    return self._m[self.__stringoffset+stringstartpos:self.__stringoffset+stringendpos]
+
+  def __iter__(self):
+    for x in xrange(self.__length):
+      yield self[x]
+
+TYPE_STRING = 0
+TYPE_INT = 1
+
+class InternalDict(MDataStructure):
+  def __init__(self, m, offset):
+    MDataStructure.__init__(self, m, offset)
+    self.__data = {}
+
+    size = self._ri(0)
+    pos = 4
+    for i in xrange(size):
+      keylen = self._di(pos)
+      s = self._offset + pos + 4
+      key = self._m[s:s + keylen]
+      pos = pos + keylen + 4
+
+      type_ = self._di(pos)
+      pos = pos + 4
+      if type_ == TYPE_STRING:
+        valuelen = self._di(pos)
+        pos = pos + 4
+        s = self._offset + pos
+        value = self._m[s:s + valuelen]
+        pos = pos + valuelen
+      elif type_ == TYPE_INT:
+        value = self._di(pos)
+        pos = pos + 4
+      else:
+        assert False, "Bad type."
+
+      self.__data[key] = value
+
+  def get(self):
+    return self.__data
+
+def MDictionary(m, offset):
+  return InternalDict(m, offset).get()
 
 class Index:
   def __init__(self):
@@ -87,9 +151,106 @@ class WriteIndex(Index):
     self.metadata = {}
     self.__tablesize = tablesize
     self.metadata["tablesize"] = tablesize
+    self.metadata["version"] = 0
+
+  def __writedict(self, f, iw, d):
+    iw(len(d))
+    p = 4
+    for k, v in d.iteritems():
+      iw(len(k))
+      f.write(k)
+      p = p + len(k) + 4 + 4
+      if isinstance(v, str):
+        iw(TYPE_STRING)
+        iw(len(v))
+        f.write(v)
+        p = p + 4 + len(v)
+      elif isinstance(v, int):
+        iw(TYPE_INT)
+        iw(v)
+        p = p + 4
+      else:
+        assert False, "Bad type"
+    return p
+
+  def __writehashtable(self, iw, d):
+    i = 0
+    for x in d:
+      if x is None:
+        iw(NOT_PRESENT)
+      else:
+        iw(x)
+      i = i + 1
+    return i * 4
+
+  def __writechainedhashtable(self, iw, d):
+    xpos = [0]
+    def adapt(x):
+      for x in d:
+        if x is None:
+          yield None
+        else:
+          yield xpos[0]
+          xpos[0] = xpos[0] + len(x) + 1
+
+    self.__writehashtable(iw, adapt(d))
+    for x in d:
+      if not x is None:
+        self.__writefixedlist(iw, x)
+    return (xpos[0] + len(d)) * 4
+
+  def __writefixedlist(self, iw, d):
+    i = 1
+    for x in d:
+      iw(x)
+      i = i + 1
+    iw(NOT_PRESENT)
+    return i * 4
+
+  def __writestringlist(self, f, iw, d):
+    iw(len(d))
+    xpos = [0]
+
+    def adapt(x):
+      for x in d:
+        xpos[0] = xpos[0] + len(x)
+        yield xpos[0]
+
+    pos = self.__writefixedlist(iw, adapt(d)) + 4
+    pos = pos + xpos[0]
+    for x in d:
+      f.write(x)
+    return pos
 
   def dump(self, f):
-    marshal.dump([self.metadata, self.__index, self.__pathlist, self.__filelist, self.__datalist], f)
+    iw = lambda x: f.write(struct.pack("!L", x))
+    f.write("PIDX")
+    pos = 4
+
+    metapos = f.tell()
+    self.metadata["indexoffset"] = 0
+    self.metadata["dataoffset"] = 0
+    self.metadata["pathoffset"] = 0
+    self.metadata["fileoffset"] = 0
+
+    pos = pos + self.__writedict(f, iw, self.metadata)
+    self.metadata["indexoffset"] = pos
+    pos = pos + self.__writechainedhashtable(iw, self.__index)
+    def adapt(x):
+      for a, b in x:
+        yield a
+        yield b
+
+    self.metadata["dataoffset"] = pos
+    pos = pos + self.__writefixedlist(iw, adapt(self.__datalist))
+    self.metadata["pathoffset"] = pos
+    pos = pos + self.__writestringlist(f, iw, self.__pathlist)
+    self.metadata["fileoffset"] = pos
+    pos = pos + self.__writestringlist(f, iw, self.__filelist)
+    endpos = f.tell()
+    f.seek(metapos)
+    self.__writedict(f, iw, self.metadata)
+    f.seek(endpos)
 
   def add(self, filename):
     path, file = os.path.split(filename)
@@ -120,9 +281,16 @@ class WriteIndex(Index):
 class ReadIndex(Index):
   def __init__(self, f):
     Index.__init__(self)
-    self.metadata, self.__index, self.__pathlist, self.__filelist, self.__datalist = marshal.load(f)
+    self.open = False
+    self.__m = mmap.mmap(f.fileno(), 0, mmap.MAP_SHARED, mmap.PROT_READ)
     self.__open = True
+    assert self.__m[0:4] == "PIDX"
+    self.metadata = MDictionary(self.__m, 4)
     self.__tablesize = self.metadata["tablesize"]
+    self.__index = MChainedHashTable(self.__m, self.metadata["indexoffset"], self.__tablesize)
+    self.__pathlist = MStringList(self.__m, self.metadata["pathoffset"])
+    self.__filelist = MStringList(self.__m, self.metadata["fileoffset"])
+    self.__datalist = MDataList(self.__m, self.metadata["dataoffset"])
 
   def __lookup(self, key):
     xlen = len(key)
@@ -132,7 +300,7 @@ class ReadIndex(Index):
     p = util.permutations(key, xlen)
     if not p:
       return []
-    x = self.__index[hash(p[0]) % self.__tablesize]
+    x = self.__index[key] 
     if x is None:
       return []
     return x
