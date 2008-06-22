@@ -2,10 +2,8 @@
 #include <string.h>
 #include "index.h"
 
-u_int32_t chksum_crc32 (unsigned char *block, unsigned int length);
-
 int main(void) {
-  struct findex *f = findex_load("/home/chris/.pyindex2");
+  struct findex *f = findex_load("/home/chris/.pyindex3");
   struct findex_ctx c;
   char *a, *b;
   char bufa[1024], bufb[1024];

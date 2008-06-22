@@ -292,7 +292,7 @@ void fstringlist_print(struct fstringlist *s) {
 
   for(i=0;i<s->size;i++) {
     char buf[8192], *p;
-    findex_e len;
+    size_t len;
 
     p = fstringlist_get(s, i, &len);
     memcpy(buf, p, len);
