@@ -3,7 +3,7 @@
 import sys, os, index
 
 def main(indexfile, basepath):
-  i = WriteIndex()
+  i = index.WriteIndex()
 
   basepath = os.path.realpath(basepath)
 
