@@ -67,12 +67,14 @@ def main(indexfn):
   f = open(indexfn, "rb")
   try:
     i = index.ReadIndex(f)
+    try:
+      window = PyIndexGUI(i)
+      window.show()
+      gtk.main()
+    finally:
+      i.close()
   finally:
     f.close()
-
-  window = PyIndexGUI(i)
-  window.show()
-  gtk.main()
 
 if __name__ == "__main__":
   if len(sys.argv) < 2:

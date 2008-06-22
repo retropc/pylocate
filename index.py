@@ -43,6 +43,7 @@ class ReadIndex(Index):
   def __init__(self, f):
     Index.__init__(self)
     self.metadata, self.__index, self.__pathlist, self.__filelist, self.__datalist = marshal.load(f)
+    self.__open = True
 
   def __lookup(self, key):
     xlen = len(key)
@@ -61,3 +62,11 @@ class ReadIndex(Index):
       file = self.__filelist[fileindex]
       if file.lower().find(key) != -1:
         yield path, file
+
+  def close(self):
+    if not self.__open:
+      return
+    self.__open = False
+
+  def __del__(self):
+    self.close()
