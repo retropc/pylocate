@@ -14,7 +14,7 @@
 
 #define Error(x) printf("%s\n", x)
 #define MCpy(dst, m, pos, size) memcpy(dst, m + pos, size)
-#define MIntCpy(dst, m, pos) { findex_e __t; memcpy(&__t, m + pos, sizeof(findex_e)); dst = htonl(__t); }
+#define MIntCpy(dst, m, pos) { findex_e __t; MCpy(&__t, m, pos, sizeof(findex_e)); dst = htonl(__t); }
 
 #define TYPE_STRING 0
 #define TYPE_INTEGER 1
@@ -54,7 +54,7 @@ struct fdatalist {
 
 struct findex {
   int fd;
-  void *map;
+  char *map;
   size_t len;
 
   struct fdict *metadata;
@@ -110,7 +110,7 @@ static void fdict_free(struct fdict *d) {
   free(d);
 }
 
-static struct fdict *fdict_load(const void *m) {
+static struct fdict *fdict_load(const char *m) {
   findex_e size, i;
   size_t pos, ssize;
   struct fdict *d;
@@ -231,10 +231,10 @@ findex_e fchain_get(fchain *c, const findex_e index) {
   return ret;
 }
 
-static void fstringlist_load(struct fstringlist *s, void *m) {
+static void fstringlist_load(struct fstringlist *s, char *m) {
   MIntCpy(s->size, m, 0);
   s->index = (findex_e *)m + 1;
-  s->values = (findex_e *)m + (2 + s->size);
+  s->values = m + (2 + s->size) * sizeof(findex_e);
 }
 
 static char *fstringlist_get(struct fstringlist *s, const findex_e index, findex_e *len) {

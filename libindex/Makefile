@@ -4,7 +4,7 @@ default: main
 
 index.c: index.h
 
-main: main.c index.c crc32.c
+main: main.o index.o crc32.o
 
 clean:
 	rm -f *.o main
