@@ -16,7 +16,7 @@ def main(indexfile, basepath):
     for x in files:
       index.add(os.path.join(xroot, x))
 
-  f = open(sys.argv[1], "wb")
+  f = open(indexfile, "wb")
   try:
     index.dump(f)
   finally:
