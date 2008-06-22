@@ -1,7 +1,7 @@
 import os, util, marshal, zlib, struct, mmap
 
 NOT_PRESENT = 2**32-1
-TABLE_SIZE = 128
+TABLE_SIZE = 128 * 128 * 128
 
 def hash(x):
   return zlib.crc32(x)
