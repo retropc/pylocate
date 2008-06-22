@@ -1,13 +1,11 @@
 #!/usr/bin/env python
 
-import sys, os
-from index import Index
+import sys, os, index
 
 def main(indexfile, terms):
-  i = Index()
   f = open(indexfile)
   try:
-    i.load(f)
+    i = index.ReadIndex(f)
   finally:
     f.close()
 

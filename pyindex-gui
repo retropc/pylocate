@@ -1,6 +1,5 @@
 #!/usr/bin/env python
-import gtk, os, sys
-from index import Index
+import gtk, os, sys, index
 
 OPENER = "xdg-open"
 
@@ -65,15 +64,13 @@ class PyIndexGUI:
       self.__listmodel.append(x[::-1])
 
 def main(indexfn):
-  index = Index()
-
   f = open(indexfn, "rb")
   try:
-    index.load(f)
+    i = index.ReadIndex(f)
   finally:
     f.close()
 
-  window = PyIndexGUI(index)
+  window = PyIndexGUI(i)
   window.show()
   gtk.main()
 

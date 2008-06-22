@@ -2,36 +2,23 @@ import os, util, marshal
 
 class Index:
   def __init__(self):
+    pass
+
+class WriteIndex(Index):
+  def __init__(self):
+    Index.__init__(self)
     self.__pathdict = {}
     self.__filedict = {}
     self.__pathlist = []
     self.__filelist = []
     self.__index = {}
-    self.metadata = {}
     self.__datalist = []
-
-  def load(self, f):
-    self.metadata, self.__index, self.__pathlist, self.__filelist, self.__datalist = marshal.load(f)
-
-  def gc(self):
-    self.__pathdict = {}
-    self.__filedict = {}
+    self.metadata = {}
 
   def dump(self, f):
     marshal.dump([self.metadata, self.__index, self.__pathlist, self.__filelist, self.__datalist], f)
 
-  def __createdicts(self):
-    if not self.__pathdict and self.__pathlist:
-      for index, value in enumerate(self.__pathlist):
-        self.__pathdict[value] = index
-
-    if not self.__filedict and self.__filelist:
-      for index, value in enumerate(self.__filelist):
-        self.__filedict[value] = index
-
   def add(self, filename):
-    self.__createdicts()
-
     path, file = os.path.split(filename)
     lcpath, lcfile = path.lower(), file.lower()
 
@@ -51,6 +38,11 @@ class Index:
 
     for p in util.dpermutate(lcfile):
       self.__index.setdefault(p, []).append(l)
+
+class ReadIndex(Index):
+  def __init__(self, f):
+    Index.__init__(self)
+    self.metadata, self.__index, self.__pathlist, self.__filelist, self.__datalist = marshal.load(f)
 
   def __lookup(self, key):
     xlen = len(key)
