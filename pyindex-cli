@@ -3,17 +3,14 @@
 import sys, os, index
 
 def main(indexfile, terms):
-  f = open(indexfile)
+  i = index.ReadIndex(indexfile)
+
   try:
-    i = index.ReadIndex(f)
-    try:
-      base = i.metadata["base"]
-      for x in i[terms]:
-        print os.path.join(base, *x)
-    finally:
-      i.close()
+    base = i.metadata["base"]
+    for x in i[terms]:
+      print os.path.join(base, *x)
   finally:
-    f.close()
+    i.close()
 
 if __name__ == "__main__":
   if len(sys.argv) < 2:

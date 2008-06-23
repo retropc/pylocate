@@ -64,17 +64,13 @@ class PyIndexGUI:
       self.__listmodel.append(x[::-1])
 
 def main(indexfn):
-  f = open(indexfn, "rb")
+  i = index.ReadIndex(indexfn)
   try:
-    i = index.ReadIndex(f)
-    try:
-      window = PyIndexGUI(i)
-      window.show()
-      gtk.main()
-    finally:
-      i.close()
+    window = PyIndexGUI(i)
+    window.show()
+    gtk.main()
   finally:
-    f.close()
+    i.close()
 
 if __name__ == "__main__":
   if len(sys.argv) < 2:

@@ -278,45 +278,83 @@ class WriteIndex(Index):
       else:
         x.append(l)
 
-class ReadIndex(Index):
-  def __init__(self, f):
-    Index.__init__(self)
-    self.open = False
-    self.__m = mmap.mmap(f.fileno(), 0, mmap.MAP_SHARED, mmap.PROT_READ)
-    self.__open = True
-    assert self.__m[0:4] == "PIDX"
-    self.metadata = MDictionary(self.__m, 4)
-    self.__tablesize = self.metadata["tablesize"]
-    self.__index = MChainedHashTable(self.__m, self.metadata["indexoffset"], self.__tablesize)
-    self.__pathlist = MStringList(self.__m, self.metadata["pathoffset"])
-    self.__filelist = MStringList(self.__m, self.metadata["fileoffset"])
-    self.__datalist = MDataList(self.__m, self.metadata["dataoffset"])
+class IndexProvider(Index):
+  def __getitem__(self, key):
+    key = key.lower()
 
-  def __lookup(self, key):
     xlen = len(key)
     if xlen > 3:
       xlen = 3
       
     p = util.permutations(key, xlen)
     if not p:
-      return []
-    x = self.__index[key] 
-    if x is None:
-      return []
-    return x
+      return
 
-  def __getitem__(self, key):
-    key = key.lower()
-    for pathindex, fileindex in (self.__datalist[x] for x in self.__lookup(key)):
-      path = self.__pathlist[pathindex]
-      file = self.__filelist[fileindex]
+    for path, file in self._fetch(p[0]):
       if file.lower().find(key) != -1:
         yield path, file
 
   def close(self):
+    pass
+
+class SlowIndexProvider(IndexProvider):
+  def __init__(self, fn):
+    IndexProvider.__init__(self)
+
+    self.__fn = open(fn, "rb")
+    try:
+      self.open = False
+      self.__m = mmap.mmap(self.__fn.fileno(), 0, mmap.MAP_SHARED, mmap.PROT_READ)
+      try:
+        assert self.__m[0:4] == "PIDX"
+        self.metadata = MDictionary(self.__m, 4)
+        self.__tablesize = self.metadata["tablesize"]
+        self.__index = MChainedHashTable(self.__m, self.metadata["indexoffset"], self.__tablesize)
+        self.__pathlist = MStringList(self.__m, self.metadata["pathoffset"])
+        self.__filelist = MStringList(self.__m, self.metadata["fileoffset"])
+        self.__datalist = MDataList(self.__m, self.metadata["dataoffset"])
+
+        self.__open = True
+      except:
+        self.__m.close()
+        raise
+    except:
+      self.__fn.close()
+      raise
+
+  def _fetch(self, key):  
+    for pathindex, fileindex in (self.__datalist[x] for x in self.__index[key]):
+      path = self.__pathlist[pathindex]
+      file = self.__filelist[fileindex]
+      yield path, file
+
+  def __close(self):
     if not self.__open:
       return
     self.__open = False
 
+    self.__m.close()
+    self.__fn.close()
+
+  # hmm
   def __del__(self):
-    self.close()
+    self.__close()
+
+try:
+  from cIndex import FastIndex
+except ImportError:
+  FastIndex = None
+
+class FastIndexProvider(IndexProvider):
+  def __init__(self, fn):
+    self.__index = FastIndex(fn)
+    self.metadata = self.__index.metadata
+
+  def _fetch(self, key):
+    return self.__index[key]
+
+if FastIndex:
+  ReadIndex = FastIndexProvider
+  print "FAST"
+else:
+  ReadIndex = SlowIndexProvider

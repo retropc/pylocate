@@ -72,7 +72,7 @@ static PyMemberDef Index_Members[] = {
 PyTypeObject Index_Type = {
   PyObject_HEAD_INIT(&PyType_Type)
   0,
-  "Index",                              /* tp_name */
+  "FastIndex",                          /* tp_name */
   sizeof(Index),                        /* tp_basicsize */
   0,                                    /* tp_itemsize */
   /* methods */
@@ -215,7 +215,7 @@ static PyObject *get_metadict(Index *self) {
 }
 
 static PyMethodDef methods[] = {
-  {"Index", Index_new, METH_VARARGS},
+  {"FastIndex", Index_new, METH_VARARGS},
   {NULL, NULL},
 };
 
