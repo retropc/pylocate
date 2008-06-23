@@ -8,16 +8,14 @@
 #include <stdio.h>
 #include <unistd.h>
 
-#include "index.h"
-
 #define DEBUG
+
+#include "index.h"
 
 #define Error(x) printf("%s\n", x)
 #define MCpy(dst, m, pos, size) memcpy(dst, m + pos, size)
 #define MIntCpy(dst, m, pos) { findex_e __t; MCpy(&__t, m, pos, sizeof(findex_e)); dst = htonl(__t); }
 
-#define TYPE_STRING 0
-#define TYPE_INTEGER 1
 #define FINDEX_VERSION 0
 
 uint32_t crc32(const char *s, const size_t len);
@@ -151,6 +149,7 @@ static struct fdict *fdict_load(const char *m) {
     switch(d->elements[i].type) {
       case TYPE_STRING:
         MCpy(d->elements[i].value.s, m, pos + sizeof(findex_e), vlen);
+        d->elements[i].value.s[vlen] = '\0';
         pos+=vlen + sizeof(findex_e);
         break;
       case TYPE_INTEGER:
@@ -380,4 +379,31 @@ char *findex_metadata_getstring(struct findex *f, const char *key) {
 
 int findex_metadata_getint(struct findex *f, const char *key, findex_e *out) {
   return fdict_getint(f->metadata, key, out);
+}
+
+int findex_metadata_gettype(struct findex *f, const int index, char **key) {
+  if(index >= f->metadata->size)
+    return -1;
+
+  if(key)
+    *key = f->metadata->elements[index].key;
+
+  return f->metadata->elements[index].type;
+}
+
+char *findex_metadata_getistring(struct findex *f, const int index) {
+  /* breaks abstraction :( */
+  if((index >= f->metadata->size) || (f->metadata->elements[index].type != TYPE_STRING))
+    return 0;
+
+  return f->metadata->elements[index].value.s;
+}
+
+int findex_metadata_getiint(struct findex *f, const int index, findex_e *out) {
+  /* breaks abstraction :( */
+  if((index >= f->metadata->size) || (f->metadata->elements[index].type != TYPE_INTEGER))
+    return 0;
+
+  *out = f->metadata->elements[index].value.i;
+  return 1;
 }

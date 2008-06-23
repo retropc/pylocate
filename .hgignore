@@ -3,3 +3,4 @@ syntax: glob
 *.pyindex
 main
 *.o
+build
