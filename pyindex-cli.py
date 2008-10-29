@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 
-import sys, os, index
+import sys, os, trie
 
 def main(indexfile, terms):
-  i = index.ReadIndex(indexfile)
+  i = trie.FIndexReadTrie(indexfile)
 
   try:
     base = i.metadata["base"]

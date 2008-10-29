@@ -1,25 +1,17 @@
 #!/usr/bin/env python
 
-import sys, os, index
+import sys, os, trie
 
 def main(indexfile, basepath):
-  i = index.WriteIndex()
-
   basepath = os.path.realpath(basepath)
+  i = trie.FIndexWriteTrie(indexfile, dict(base=basepath))
 
-  i.metadata["base"] = basepath
   l = len(basepath) + 1
 
   for root, dirs, files in os.walk(basepath):
     xroot = root[l:]
     for x in files:
-      i.add(os.path.join(xroot, x))
-
-  f = open(indexfile, "wb")
-  try:
-    i.dump(f)
-  finally:
-    f.close()
+      i.add(xroot, x)
 
 if __name__ == "__main__":
   if len(sys.argv) < 3:

@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import gtk, os, sys, index
+import gtk, os, sys, trie
 
 OPENER = "xdg-open"
 
@@ -57,6 +57,8 @@ class PyIndexGUI:
     self.__listmodel.clear()
     self.__data = []
 
+    if t == "":
+      return
     for index, x in enumerate(self.__index[t]):
       if index > 25:
         break
@@ -64,7 +66,7 @@ class PyIndexGUI:
       self.__listmodel.append(x[::-1])
 
 def main(indexfn):
-  i = index.ReadIndex(indexfn)
+  i = trie.FIndexReadTrie(indexfn)
   try:
     window = PyIndexGUI(i)
     window.show()
