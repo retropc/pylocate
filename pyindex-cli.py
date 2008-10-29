@@ -14,6 +14,6 @@ def main(indexfile, terms):
 
 if __name__ == "__main__":
   if len(sys.argv) < 2:
-    print "usage: %s [index file] [search term]"
+    print "usage: %s [index file] [search term]" % sys.argv[0]
   else:
     main(sys.argv[1], sys.argv[2])
