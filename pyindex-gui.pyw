@@ -1,7 +1,10 @@
 #!/usr/bin/env python
-import gtk, os, sys, trie
+import gtk, os, sys, trie, platform, ctypes
 
-OPENER = "xdg-open"
+if platform.system() == "Windows":
+  exc = lambda x: ctypes.windll.shell32.ShellExecuteW(0, u'open',  ctypes.c_wchar_p(x), None, None, 1)
+else:
+  exc = lambda x: os.spawnvp(os.P_NOWAIT, OPENER, ["xdg-open", x])
 
 SCRIPTPATH, _ = os.path.split(sys.argv[0])
 
@@ -49,7 +52,7 @@ class PyIndexGUI:
 
   def on_results_row_activated(self, widget, column, data=None):
     file = os.path.join(self.__index.metadata["base"], self.__data[column[0]])
-    os.spawnvp(os.P_NOWAIT, OPENER, [OPENER, file])
+    exc(file)
     self.__window.destroy()
 
   def on_search_changed(self, widget, data=None):

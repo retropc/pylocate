@@ -3,16 +3,27 @@
 import sys, os, trie
 
 def main(indexfile, basepath):
-  basepath = os.path.realpath(basepath)
-  i = trie.FIndexWriteTrie(indexfile, dict(base=basepath))
+  basepath = unicode(os.path.realpath(basepath))
+  
+  newfile = "%s.new" % indexfile
+  i = trie.FIndexWriteTrie(newfile, dict(base=basepath))
 
-  l = len(basepath) + 1
+  l = len(basepath)
 
   for root, dirs, files in os.walk(basepath):
     xroot = root[l:]
+    if xroot == "":
+      continue
     for x in files:
       i.add(xroot, x)
+    
+    
+  i.close()
 
+  if os.path.exists(indexfile):
+    os.unlink(indexfile)
+  os.rename(newfile, indexfile)
+  
 if __name__ == "__main__":
   if len(sys.argv) < 3:
     print "usage: %s [index file] [base path]" % sys.argv[0]
