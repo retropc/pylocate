@@ -68,6 +68,11 @@ class PyIndexGUI:
       self.__data.append(os.path.join(*x))
       self.__listmodel.append(x[::-1])
 
+def alert(text):
+  q = gtk.MessageDialog(None, gtk.DIALOG_DESTROY_WITH_PARENT, gtk.MESSAGE_INFO, gtk.BUTTONS_OK, text.encode("utf-8"))
+  q.run()
+  q.destroy()
+
 def main(indexfn):
   i = trie.FIndexReadTrie(indexfn)
   try:
@@ -79,7 +84,6 @@ def main(indexfn):
 
 if __name__ == "__main__":
   if len(sys.argv) < 2:
-    print "usage: %s [index file]" % sys.argv[0]
+    alert("usage: %s [index file]" % sys.argv[0])
   else:
     main(sys.argv[1])
-
