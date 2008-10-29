@@ -12,11 +12,12 @@ def main(indexfile, basepath):
 
   for root, dirs, files in os.walk(basepath):
     xroot = root[l:]
-    if xroot == "":
-      continue
+    if len(xroot) > 0 and xroot[0] == os.path.sep:
+      xroot = xroot[1:]
+
     for x in files:
+#      print xroot, x
       i.add(xroot, x)
-    
     
   i.close()
 
