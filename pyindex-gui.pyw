@@ -9,14 +9,15 @@ else:
 SCRIPTPATH, _ = os.path.split(sys.argv[0])
 
 class IndexThread(threading.Thread):
-  def __init__(self, index):
+  def __init__(self, index, max=25):
     threading.Thread.__init__(self)
     self.__index = index
     self.__terminated = False
     self.__stopped = False
     self.__cv = threading.Condition()
     self.__data = None
-
+    self.__max = max
+    
   def wakeup(self, data):
     self.__cv.acquire()
     try:
@@ -72,7 +73,7 @@ class IndexThread(threading.Thread):
     for index, x in enumerate(self.__index[data]):
       if self.stopped():
         return
-      if index > 25:
+      if index > self.__max:
         break
         
       l.append(x)
@@ -100,7 +101,8 @@ class PyIndexGUI:
 
     self.__window = builder.get_object("window")
     self.__treeview = builder.get_object("results")
-
+    self.__statusbar = builder.get_object("statusbar")
+    
     self.__setup_treeview()
 
   def __setup_treeview(self):
@@ -130,29 +132,44 @@ class PyIndexGUI:
     if data.keyval == gtk.keysyms.Escape:
       self.__window.destroy()
 
+  def get_full_path(self, column):
+    return os.path.join(self.__index.metadata["base"], self.__data[column[0]])
+
   def on_results_row_activated(self, widget, column, data=None):
-    file = os.path.join(self.__index.metadata["base"], self.__data[column[0]])
-    exc(file)
+    exc(self.get_full_path(column))
     self.__window.destroy()
 
+  def set_statusbar(self, text):
+    cid = self.__statusbar.get_context_id("Status bar")
+    self.__statusbar.pop(cid)
+    self.__statusbar.push(cid, text)
+
+  def clear(self):
+    self.__data = []
+    self.__listmodel.clear()
+    self.set_statusbar("")
+    
+  def on_results_cursor_changed(self, widget, data=None):
+    row = self.__treeview.get_selection().get_selected_rows()[1][0]
+    self.set_statusbar(self.get_full_path(row))
+    
   def on_search_changed(self, widget, data=None):
     t = widget.get_text()
 
     self.__indexthread.wakeup(t)
     if t == "":
-      self.__data = []
-      self.__listmodel.clear()
+      self.clear()
     
   def add(self, data, first):
     gtk.gdk.threads_enter()
     try:
       if first:
-        self.__data = []
-        self.__listmodel.clear()
+        self.clear()
       
       for x in data:
         self.__data.append(os.path.join(*x))
         self.__listmodel.append(x[::-1])
+      self.__treeview.columns_autosize()
     finally:
       gtk.gdk.threads_leave()
     
