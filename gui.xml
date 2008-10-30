@@ -1,4 +1,4 @@
-<?xml version="1.0" ?><!--Generated with glade3 3.4.5 on Sat Jun 21 21:17:20 2008 --><interface>
+<?xml version="1.0" ?><!--Generated with glade3 3.4.3 on Thu Oct 30 00:43:16 2008 --><interface>
   <object class="GtkWindow" id="window">
     <property name="title" translatable="yes">PyIndex</property>
     <property name="window_position">GTK_WIN_POS_CENTER</property>
@@ -30,13 +30,23 @@
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
                 <property name="headers_visible">False</property>
-                <property name="headers_clickable">True</property>
                 <signal handler="on_results_row_activated" name="row_activated"/>
+                <signal handler="on_results_cursor_changed" name="cursor_changed"/>
               </object>
             </child>
           </object>
           <packing>
             <property name="position">1</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkStatusbar" id="statusbar">
+            <property name="visible">True</property>
+            <property name="spacing">2</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="position">2</property>
           </packing>
         </child>
       </object>
