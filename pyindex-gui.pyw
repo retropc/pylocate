@@ -47,6 +47,7 @@ class IndexThread(threading.Thread):
   def terminate(self):
     self.__cv.acquire()
     try:
+      self.__addfn = lambda x: 0
       self.__terminated = True    
       self.__stopped = True
       self.__cv.notify()
