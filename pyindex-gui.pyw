@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import gtk, os, sys, trie, platform, ctypes
+import gtk, os, sys, trie, platform, ctypes, threading, time
 
 if platform.system() == "Windows":
   exc = lambda x: ctypes.windll.shell32.ShellExecuteW(0, u'open',  ctypes.c_wchar_p(x), None, None, 1)
@@ -8,9 +8,88 @@ else:
 
 SCRIPTPATH, _ = os.path.split(sys.argv[0])
 
-class PyIndexGUI:
+class IndexThread(threading.Thread):
   def __init__(self, index):
+    threading.Thread.__init__(self)
     self.__index = index
+    self.__terminated = False
+    self.__stopped = False
+    self.__cv = threading.Condition()
+    self.__data = None
+
+  def wakeup(self, data):
+    self.__cv.acquire()
+    try:
+      self.__data = data
+      self.__stopped = True
+      self.__cv.notify()
+    finally:
+      self.__cv.release()
+    
+  def run(self):
+    while not self.__terminated:
+      self.__cv.acquire()
+      try:
+        while self.__data == None and not self.__terminated:
+          self.__cv.wait()
+          
+        if self.__terminated:
+          return
+          
+        self.__stopped = False
+        data = self.__data
+        self.__data = None
+      finally:
+        self.__cv.release()
+        
+      self.work(data)
+      
+  def terminate(self):
+    self.__cv.acquire()
+    try:
+      self.__terminated = True    
+      self.__stopped = True
+      self.__cv.notify()
+    finally:
+      self.__cv.release()
+    
+  def stopped(self):
+    self.__cv.acquire()
+    try:
+      return self.__stopped
+    finally:
+      self.__cv.release()
+      
+  def work(self, data):
+    if data == "":
+      return
+
+    t = time.time()
+    l = []
+    first = True
+    
+    for index, x in enumerate(self.__index[data]):
+      if self.stopped():
+        return
+      if index > 25:
+        break
+        
+      l.append(x)
+      nt = time.time()
+      # only add stuff if there's been an noticable time difference
+      if nt - t > 0.1:
+        t = nt
+        self.addfn(l, first)
+        first = False
+        l = []
+        
+    self.addfn(l, first)
+    
+class PyIndexGUI:
+  def __init__(self, index, indexthread):
+    self.__index = index
+    self.__indexthread = indexthread
+    self.__indexthread.addfn = self.add
     self.__data = []
 
     builder = gtk.Builder()
@@ -57,17 +136,25 @@ class PyIndexGUI:
 
   def on_search_changed(self, widget, data=None):
     t = widget.get_text()
-    self.__listmodel.clear()
-    self.__data = []
 
+    self.__indexthread.wakeup(t)
     if t == "":
-      return
-    for index, x in enumerate(self.__index[t]):
-      if index > 25:
-        break
-      self.__data.append(os.path.join(*x))
-      self.__listmodel.append(x[::-1])
-
+      self.__data = []
+      self.__listmodel.clear()
+    
+  def add(self, data, first):
+    gtk.gdk.threads_enter()
+    try:
+      if first:
+        self.__data = []
+        self.__listmodel.clear()
+      
+      for x in data:
+        self.__data.append(os.path.join(*x))
+        self.__listmodel.append(x[::-1])
+    finally:
+      gtk.gdk.threads_leave()
+    
 def alert(text):
   q = gtk.MessageDialog(None, gtk.DIALOG_DESTROY_WITH_PARENT, gtk.MESSAGE_INFO, gtk.BUTTONS_OK, text.encode("utf-8"))
   q.run()
@@ -76,12 +163,19 @@ def alert(text):
 def main(indexfn):
   i = trie.FIndexReadTrie(indexfn)
   try:
-    window = PyIndexGUI(i)
-    window.show()
-    gtk.main()
+    it = IndexThread(i)
+    it.start()
+    try:
+      window = PyIndexGUI(i, it)
+      window.show()
+      gtk.gdk.threads_init()
+      gtk.main()
+    finally:
+      it.terminate()
+      it.join()
   finally:
     i.close()
-
+    
 if __name__ == "__main__":
   if len(sys.argv) < 2:
     alert("usage: %s [index file]" % sys.argv[0])
