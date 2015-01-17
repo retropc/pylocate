@@ -70,16 +70,16 @@ class IndexThread(threading.Thread):
     l = []
     first = True
     
-    for index, x in enumerate(self.__index[data]):
+    for i, x in enumerate(self.__index[data]):
       if self.stopped():
         return
-      if index > self.__max:
+      if i > self.__max:
         break
         
       l.append(x)
       nt = time.time()
-      # only add stuff if there's been an noticable time difference
-      if nt - t > 0.1:
+      # only add stuff if there's been an noticeable time difference
+      if nt - t > 0.1 or first and len(l) > 10:
         t = nt
         self.addfn(l, first)
         first = False
