@@ -9,7 +9,7 @@ else:
 SCRIPTPATH, _ = os.path.split(sys.argv[0])
 
 class IndexThread(threading.Thread):
-  def __init__(self, index, max=25):
+  def __init__(self, index, max=500):
     threading.Thread.__init__(self)
     self.__index = index
     self.__terminated = False
@@ -138,6 +138,15 @@ class PyIndexGUI:
   def on_results_row_activated(self, widget, column, data=None):
     exc(self.get_full_path(column))
     self.__window.destroy()
+
+  def on_results_button_press_event(self, widget, event):
+    if event.type != gtk.gdk.BUTTON_PRESS or event.button != 3:
+      return
+    
+    tree = self.__treeview.get_path_at_pos(int(event.x), int(event.y))
+    if not tree:
+      return
+    exc(os.path.dirname(self.get_full_path(tree[0])))
 
   def set_statusbar(self, text):
     cid = self.__statusbar.get_context_id("Status bar")
