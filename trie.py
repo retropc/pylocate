@@ -4,7 +4,7 @@ import mmap
 import platform
 import codec
 
-DEFAULT_CODEC = codec.ZlibCodec(level=9)
+DEFAULT_CODEC = codec.ZlibCodec(level=3)
 #DEFAULT_CODEC = codec.PlainCodec()
 
 def dpermutate(x, i=(1,2,3)):
@@ -19,6 +19,23 @@ def permutations(x, l):
 class TrieException(Exception):
   pass
 
+TRIE_KEY = {}
+def trie_key(key):
+  try:
+    return TRIE_KEY[key]
+  except KeyError:
+    pass
+    
+  l = len(key)
+  if l == 3:
+    k = INT_LEN*(ord(key[0]) + ord(key[1]) * 256 + ord(key[2])*65536 + 65536)
+  elif l == 2:
+    k = INT_LEN*(ord(key[0]) + ord(key[1]) * 256 + 256)
+  else:
+    k = INT_LEN*ord(key[0])
+  TRIE_KEY[key] = k
+  return k
+  
 class SearchTrie(object):
   VERSION = 1
   MAGIC = "FITRIE" + U32(VERSION)
@@ -31,17 +48,6 @@ class SearchTrie(object):
     self._m.close()
     self._f.close()
     
-  def _trie_pos(self, key):
-    l = len(key)
-    if l == 0 or l > 3:
-      raise TrieException("Bad key")
-    if l == 1:
-      return INT_LEN*ord(key[0])
-    elif l == 2:
-      return INT_LEN*(ord(key[0]) + ord(key[1]) * 256 + 256)
-    else:
-      return INT_LEN*(ord(key[0]) + ord(key[1]) * 256 + ord(key[2])*256*256 + 256*256)
-
   def _read(self, pos):
     pos+=self.__offset
     return self._m[pos:pos+INT_LEN]
@@ -56,7 +62,7 @@ class HeaderTrie(SearchTrie):
 class WriteTrie(HeaderTrie):
   def __init__(self, filename, metadata={}, codec=DEFAULT_CODEC):
     self.__last_path = None
-  
+    self.__counts = bytearray(256 + 256*256)
     open(filename, "w").close()
     
     f = MMapOpen(filename, "w")
@@ -88,10 +94,18 @@ class WriteTrie(HeaderTrie):
     path_pos = self.__intern_path(path)
     data_pos = U32(self._l.write_string("%s%s" % (U32(path_pos), fn)))
     
+    counts = self.__counts
     for key in keys:
-      trie_pos = self._trie_pos(key)
-      next_pos = self._read(trie_pos)
+      trie_pos = trie_key(key)
       
+      if len(key) < 3:
+        trie_pos_d = trie_pos / INT_LEN
+        c = counts[trie_pos_d]
+        if c == 255:
+          continue
+        counts[trie_pos_d]+=1
+      
+      next_pos = self._read(trie_pos)
       list_pos = self._l.write("%s%s" % (next_pos, data_pos))
       self._write(trie_pos, list_pos)
       
@@ -122,7 +136,7 @@ class ReadTrie(HeaderTrie):
     del self.metadata["__platform"]
     
   def _get(self, key):
-    trie_pos = self._trie_pos(key)
+    trie_pos = trie_key(key)
     
     current_pos = gU32(self._read(trie_pos))
     while current_pos != 0:
@@ -133,8 +147,7 @@ class ReadTrie(HeaderTrie):
 
 class FIndexWriteTrie(WriteTrie):
   def add(self, path, fn):
-    keys = list(set(dpermutate(fn.lower().encode("iso-8859-1", "replace"))))
-    keys.sort()
+    keys = set(dpermutate(fn.lower().encode("iso-8859-1", "replace")))
     self._add(keys, path.encode("utf8"), fn.encode("utf8"))
       
 class FIndexReadTrie(ReadTrie):
@@ -170,4 +183,3 @@ def main():
     
 if __name__ == "__main__":
   main()
-
