@@ -11,6 +11,7 @@ SCRIPTPATH, _ = os.path.split(sys.argv[0])
 class IndexThread(threading.Thread):
   def __init__(self, index, max=500):
     threading.Thread.__init__(self)
+    self.setDaemon(True)
     self.__index = index
     self.__terminated = False
     self.__stopped = False
