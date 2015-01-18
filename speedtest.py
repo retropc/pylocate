@@ -12,7 +12,7 @@ def produce():
     f.write(x[0].decode("iso8859-1", "replace").encode("utf8") + "\n")
     f.write(x[1].decode("iso8859-1", "replace").encode("utf8") + "\n")
     i+=1
-    if i > 55000:
+    if i > 175000:
       break
     
 def run():
