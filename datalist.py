@@ -6,11 +6,11 @@ import codec
 class DataListException(Exception):
   pass
 
-class DataList(object):
-  PAGE_SIZE = 65535
-  MAX_PAGES = 65535
-  PAGE_TABLE_LEN = MAX_PAGES * INT_LEN
+PAGE_SIZE = 65536
+MAX_PAGES = 65536
+PAGE_TABLE_LEN = MAX_PAGES * INT_LEN
   
+class DataList(object):
   def __init__(self, handle):
     super(DataList, self).__init__()
     self._handle = handle
@@ -18,20 +18,22 @@ class DataList(object):
 class WriteDataList(DataList):
   def __init__(self, f, codec, offset=0):
     self.__f, self.__offset, self.__codec = f, offset, codec
-    self.__pos, self.__page, self.__buf, self.__buf_len, self.__pages = 0, 0, [], 0, array.array(INT_TYPE)
+    self.__pos, self.__page, self.__pages = 0, 0, array.array(INT_TYPE)
+    self.__buf, self.__buf_pos = bytearray(), 0
+    self.__write_pos, self.__write_buf, self.__write_buf_len = 0, bytearray(), 0
     
   def write(self, value):
     s_len = len(value)
-    if s_len > self.PAGE_SIZE:
+    if s_len > PAGE_SIZE:
       raise DataListException("too large a value")
 
-    pos = self.__buf_len
-    if pos + s_len > self.PAGE_SIZE:
+    pos = self.__buf_pos
+    if pos + s_len > PAGE_SIZE:
       self.__flush_page()
-      pos = self.__buf_len
+      pos = self.__buf_pos
     
-    self.__buf.append(value)
-    self.__buf_len+=s_len
+    self.__buf += value
+    self.__buf_pos+=s_len
     return (self.__page << 16) + pos
   
   def __seek(self, pos):
@@ -40,27 +42,41 @@ class WriteDataList(DataList):
   def __tell(self):
     return self.__f.tell() - self.__offset
 
+  def __write_data(self, data):
+    self.__write_buf+=data
+    self.__write_buf_len+=len(data)
+    if self.__write_buf_len > 1024000:
+      self.__flush_data()
+      
+  def __flush_data(self):
+    if not self.__write_buf:
+      return
+
+    self.__seek(PAGE_TABLE_LEN + self.__write_pos)
+    self.__f.write(self.__write_buf)
+    self.__write_pos+=self.__write_buf_len
+    self.__write_buf, self.__write_buf_len = bytearray(), 0
+
   def __flush_page(self):
     if not self.__buf:
       return
-    if self.__page >= self.MAX_PAGES:
+    if self.__page >= MAX_PAGES:
       raise DataListException("too many pages")
     
-    d = self.__codec.encode("".join(self.__buf))
-    pos = self.PAGE_TABLE_LEN + self.__pos
-    self.__seek(pos)
-    self.__f.write(d)
+    d = self.__codec.encode(buffer(self.__buf))
+    self.__write_data(d)
     self.__pos+=len(d)
     self.__pages.append(self.__pos)
 
+    self.__buf = bytearray()
     self.__page+=1
-    self.__buf = []
-    self.__buf_len = 0
+    self.__buf_pos = 0
           
   def flush(self):
     self.__flush_page()
     self.__seek(0)
     self.__pages.tofile(self.__f)
+    self.__flush_data()
     
   def write_string(self, value):
     return self.write(U16(len(value)) + value)
@@ -69,11 +85,11 @@ class WriteDataList(DataList):
     return self.write_string(json.dumps(value))
     
 class ReadDataList(DataList):
-  def __init__(self, f, m, codec, offset=0, cache_max=64):
+  def __init__(self, f, m, codec, offset=0, cache_max=128):
     self.__m, self.__offset, self.__codec, self.__cache_max = m, offset, codec, cache_max
     self.__pages, self.__cache = array.array(INT_TYPE), {}
     f.seek(self.__offset)
-    self.__pages.fromfile(f, self.MAX_PAGES)
+    self.__pages.fromfile(f, MAX_PAGES)
     
   def __read(self, pos, length):
     pos = pos + self.__offset
@@ -95,7 +111,7 @@ class ReadDataList(DataList):
     while len(self.__cache) > self.__cache_max:
       del self.__cache[self.__cache.iterkeys().next()]
 
-    u = self.__read(self.PAGE_TABLE_LEN + page_offset, page_len)
+    u = self.__read(PAGE_TABLE_LEN + page_offset, page_len)
     self.__cache[page] = data = self.__codec.decode(u)
     return data
     
