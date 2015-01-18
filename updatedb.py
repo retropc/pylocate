@@ -1,30 +1,77 @@
 #!/usr/bin/env python
 
-import sys, os, trie
+import sys
+import os
+import scandir
+import trie
+import multiprocessing
 
+def index(base, root):
+  l = len(base)  
+  batch = []
+  for root, dirs, files in scandir.walk(root):
+    root = root[l:]
+    if len(root) > 0 and root[0] == os.path.sep:
+      root = root[1:]
+
+    for filename in files:
+      batch+=[(root, filename)]
+      if len(batch) > 50:
+        yield batch
+        batch = []
+        
+  if batch:
+    yield batch
+
+def worker_parallel_fn(base, path, q):
+  for batch in index(base, path):
+    q.put(batch)
+  q.put(None)
+  
+def worker_parallel(base, paths):
+  q = multiprocessing.Queue(maxsize=10000)
+  
+  remaining = len(paths)
+  for path in paths:
+    indexer = multiprocessing.Process(target=worker_parallel_fn, args=(base, path, q))
+    indexer.start()
+  
+  while True:
+    batch = q.get()
+    if batch is None:
+      remaining-=1
+      if not remaining:
+        break
+      continue
+      
+    for x in batch:
+      yield x
+
+def worker_serial(base, paths):
+  for path in paths:
+    for x in index(base, path):
+      for y in x:
+        yield y
+
+WORKER = worker_serial
 def main(indexfile, paths):
   paths = [unicode(os.path.realpath(x)) for x in paths]
   
-  newfile = "%s.new" % indexfile
   if len(paths) == 1:
-    d = dict(base=paths[0])
-    l = len(paths[0])
+    base = paths[0]
   else:
-    d = dict(base="")
-    l = 0
-
-  i = trie.FIndexWriteTrie(newfile, d)
-
-  for path in paths:
-    for root, dirs, files in os.walk(path):
-      xroot = root[l:]
-      if len(xroot) > 0 and xroot[0] == os.path.sep:
-        xroot = xroot[1:]
-
-      for x in files:
-        i.add(xroot, x)
-    
-  i.close()
+    base = ""
+  
+  newfile = "%s.new" % indexfile
+  i = trie.FIndexWriteTrie(newfile, {"base": base})
+  try:
+    for root, filename in WORKER(base, paths):
+      i.add(root, filename)
+  except:
+    print repr(root), repr(filename)
+    raise
+  finally:
+    i.close()
 
   if os.path.exists(indexfile):
     os.unlink(indexfile)
