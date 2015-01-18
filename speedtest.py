@@ -1,6 +1,7 @@
 import indexer
 import trie
 import time
+import os
 
 def produce():
   f = open("dump", "w")
@@ -40,5 +41,6 @@ def main():
   print t2 - t
 
 if __name__ == "__main__":
-  #produce()
+  if not os.path.exists("dump"):
+    produce()
   main()

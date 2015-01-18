@@ -1,12 +1,22 @@
 from util import *
 import datalist
-import mmap
 import platform
 import codec
+import struct
+import array
 
 DEFAULT_CODEC = codec.ZlibCodec(level=3)
 #DEFAULT_CODEC = codec.PlainCodec()
-
+            
+               #01234567890123456789012345678901234567890
+               #          1         2         3         4
+KEY_CHARS = "\x000123456789abcdefghijklmnopqrstuvwxyz ,-."
+KEY_CHARS_LEN = len(KEY_CHARS)            
+KEY_CHARS_LEN_SQ = KEY_CHARS_LEN*KEY_CHARS_LEN
+KEY_MAP = [0] * 256
+for i, x in enumerate(KEY_CHARS):
+  KEY_MAP[ord(x)] = i
+  
 def dpermutate(x, i=(1,2,3)):
   return permutations(x, 1) + permutations(x, 2) + permutations(x, 3)
 
@@ -19,6 +29,7 @@ def permutations(x, l):
 class TrieException(Exception):
   pass
 
+KEY_UNPACK_2, KEY_UNPACK_3 = struct.Struct("bb").unpack, struct.Struct("bbb").unpack
 TRIE_KEY = {}
 def trie_key(key):
   try:
@@ -27,60 +38,54 @@ def trie_key(key):
     pass
     
   l = len(key)
-  if l == 3:
-    k = INT_LEN*(ord(key[0]) + ord(key[1]) * 256 + ord(key[2])*65536 + 65536)
+  if l == 1:
+    k = KEY_MAP[ord(key[0])]
   elif l == 2:
-    k = INT_LEN*(ord(key[0]) + ord(key[1]) * 256 + 256)
+    kv = KEY_UNPACK_2(key[:2])
+    k = KEY_MAP[kv[0]] + KEY_CHARS_LEN * KEY_MAP[kv[1]]
   else:
-    k = INT_LEN*ord(key[0])
+    kv = KEY_UNPACK_3(key[:3])
+    k = KEY_MAP[kv[0]] + KEY_CHARS_LEN * (KEY_MAP[kv[1]] + KEY_CHARS_LEN * KEY_MAP[kv[2]])
+
   TRIE_KEY[key] = k
   return k
-  
+
 class SearchTrie(object):
   VERSION = 1
   MAGIC = "FITRIE" + U32(VERSION)
-  TRIE_LEN = (256 + 256*256 + 256*256*256) * INT_LEN
+  TRIE_LEN = KEY_CHARS_LEN**3 * INT_LEN
 
-  def __init__(self, f, m, l, offset=0):
-    self._f, self._m, self._l, self.__offset = f, m, l, offset
-    
+  def __init__(self, f, l, offset=0):
+    self._f, self._l, self.__offset = f, l, offset
+    self._trie = array.array(INT_TYPE)
+  
   def close(self):
-    self._m.close()
     self._f.close()
-    
-  def _read(self, pos):
-    pos+=self.__offset
-    return self._m[pos:pos+INT_LEN]
-
-  def _write(self, pos, data):
-    pos+=self.__offset
-    self._m[pos:pos+INT_LEN] = U32(data)
     
 class HeaderTrie(SearchTrie):
   HEADER_LEN = 1024
   
 class WriteTrie(HeaderTrie):
   def __init__(self, filename, metadata={}, codec=DEFAULT_CODEC):
+    f = open(filename, "wb")
+
+    l = datalist.WriteDataList(f, codec, offset=self.HEADER_LEN + self.TRIE_LEN)
+    super(WriteTrie, self).__init__(f, l, offset=self.HEADER_LEN)
+
     self.__last_path = None
-    self.__counts = bytearray(256 + 256*256)
-    open(filename, "w").close()
+    self.__counts = bytearray(KEY_CHARS_LEN**2)
+    self._trie.extend(bytearray(KEY_CHARS_LEN**3))
     
-    f = MMapOpen(filename, "w")
-    length = self.TRIE_LEN + self.HEADER_LEN
-    m = MMap(f, "w", length)
-    l = datalist.WriteDataList(f, codec, offset=length)
-    
-    super(WriteTrie, self).__init__(f, m, l, offset=self.HEADER_LEN)
     self.__write_header(metadata)
     
   def __write_header(self, metadata):
-    self._m.seek(0)
-    self._m.write(self.MAGIC)
+    self._f.seek(0)
+    self._f.write(self.MAGIC)
     
     metadata_w = {}
     metadata_w.update(metadata)
     metadata_w["__platform"] = platform.system()
-    self._m.write(U32(self._l.write_dict(metadata_w)))
+    self._f.write(U32(self._l.write_dict(metadata_w)))
 
   def __intern_path(self, path):
     if self.__last_path is None or self.__last_path[0] != path:
@@ -99,31 +104,32 @@ class WriteTrie(HeaderTrie):
       trie_pos = trie_key(key)
       
       if len(key) < 3:
-        trie_pos_d = trie_pos / INT_LEN
-        c = counts[trie_pos_d]
+        c = counts[trie_pos]
         if c == 255:
           continue
-        counts[trie_pos_d]+=1
+        counts[trie_pos]+=1
       
-      next_pos = self._read(trie_pos)
-      list_pos = self._l.write("%s%s" % (next_pos, data_pos))
-      self._write(trie_pos, list_pos)
+      next_pos = self._trie[trie_pos]
+      list_pos = self._l.write("%s%s" % (U32(next_pos), data_pos))
+      self._trie[trie_pos] = list_pos
       
   def close(self):
     self._l.flush()
+    self._f.seek(self.HEADER_LEN)
+    self._trie.tofile(self._f)
     super(WriteTrie, self).close()
     
 class ReadTrie(HeaderTrie):
   def __init__(self, filename, codec=DEFAULT_CODEC):
     f = MMapOpen(filename, "r")
-    f.seek(0, 2)
-    
-    m = MMap(f, "r")
-    l = datalist.ReadDataList(f, m, codec, offset=self.TRIE_LEN + self.HEADER_LEN)
-    super(ReadTrie, self).__init__(f, m, l, offset=self.HEADER_LEN)
+    self._m = MMap(f, "r")
+    l = datalist.ReadDataList(f, self._m, codec, offset=self.TRIE_LEN + self.HEADER_LEN)
+    super(ReadTrie, self).__init__(f, l, offset=self.HEADER_LEN)
 
     self.__read_header()
-
+    f.seek(self.HEADER_LEN)
+    self._trie.fromfile(f, KEY_CHARS_LEN**3)
+    
   def __read_header(self):
     if self._m[:len(self.MAGIC)] != self.MAGIC:
       raise TrieException("Bad header")
@@ -137,14 +143,17 @@ class ReadTrie(HeaderTrie):
     
   def _get(self, key):
     trie_pos = trie_key(key)
-    
-    current_pos = gU32(self._read(trie_pos))
+    current_pos = self._trie[trie_pos]
     while current_pos != 0:
       current_pos, data_pos = gU32x2(self._l.read(current_pos, INT_LEN*2))
       data = self._l.read_string(data_pos)
 
       yield self._l.read_string(gU32(data[:INT_LEN])), data[INT_LEN:]
 
+  def close(self):
+    self._m.close()
+    super(ReadTrie, self).close()
+    
 class FIndexWriteTrie(WriteTrie):
   def add(self, path, fn):
     keys = set(dpermutate(fn.lower().encode("iso-8859-1", "replace")))
