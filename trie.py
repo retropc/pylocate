@@ -17,13 +17,12 @@ KEY_MAP = [0] * 256
 for i, x in enumerate(KEY_CHARS):
   KEY_MAP[ord(x)] = i
   
-def dpermutate(x, i=(1,2,3)):
-  return permutations(x, 1) + permutations(x, 2) + permutations(x, 3)
-
-def permutations(x, l):
-  o = []
-  for i in range(0, len(x) - l + 1):
-    o.append(x[i:i + l])
+def permutate(x):
+  o = set()
+  for i in range(0, len(x) - 1):
+    o.add(x[i:i + 2])
+    o.add(x[i:i + 3])
+  o.update(x)
   return o
 
 class TrieException(Exception):
@@ -156,22 +155,17 @@ class ReadTrie(HeaderTrie):
     
 class FIndexWriteTrie(WriteTrie):
   def add(self, path, fn):
-    keys = set(dpermutate(fn.lower().encode("iso-8859-1", "replace")))
+    keys = permutate(fn.lower().encode("iso-8859-1", "replace"))
     self._add(keys, path.encode("utf8"), fn.encode("utf8"))
       
 class FIndexReadTrie(ReadTrie):
   def __getitem__(self, key):
     key = key.lower().encode("iso-8859-1", "replace")
-
-    xlen = len(key)
-    if xlen > 3:
-      xlen = 3
-
-    p = permutations(key, xlen)
-    if not p:
+    if not key:
       return
-
-    for path, file in self._get(p[0]):
+      
+    xlen = min(3, len(key))
+    for path, file in self._get(key[:xlen]):
       df = file.lower().encode("iso-8859-1", "replace")
       if df.find(key) != -1:
         yield path.decode("utf8"), file.decode("utf8")
