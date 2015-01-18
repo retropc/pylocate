@@ -140,13 +140,17 @@ class PyIndexGUI:
     self.__window.destroy()
 
   def on_results_button_press_event(self, widget, event):
-    if event.type != gtk.gdk.BUTTON_PRESS or event.button != 3:
+    if event.type != gtk.gdk.BUTTON_PRESS or event.button not in (2, 3):
       return
     
     tree = self.__treeview.get_path_at_pos(int(event.x), int(event.y))
     if not tree:
       return
-    exc(os.path.dirname(self.get_full_path(tree[0])))
+      
+    p = self.get_full_path(tree[0])
+    if event.button == 3:
+      p = os.path.dirname(p)
+    exc(p)
 
   def set_statusbar(self, text):
     cid = self.__statusbar.get_context_id("Status bar")
