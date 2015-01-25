@@ -8,7 +8,7 @@ def main(indexfile, terms):
   try:
     base = i.metadata["base"]
     for x in i[terms]:
-      print os.path.join(base, *x)
+      print os.path.join(base, *x).encode("utf8")
   finally:
     i.close()
 
