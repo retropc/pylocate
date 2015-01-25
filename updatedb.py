@@ -6,7 +6,7 @@ import scandir
 import trie
 import indexer
 
-def main(indexfile, paths, parallel=True):
+def main(indexfile, paths, parallel=True, exclude_path=set(), exclude_name=set()):
   ic = indexer.ParallelIndexer if parallel else indexer.SerialIndexer
   paths = [unicode(os.path.realpath(x)) for x in paths]
   
@@ -18,7 +18,7 @@ def main(indexfile, paths, parallel=True):
   newfile = "%s.new" % indexfile
   i = trie.FIndexWriteTrie(newfile, {"base": base})
   
-  w = ic(base, paths)
+  w = ic(base, paths, exclude_path, exclude_name)
   w.start()
   try:
     for root, filename in w:
@@ -34,16 +34,25 @@ def main(indexfile, paths, parallel=True):
 if __name__ == "__main__":
   args = sys.argv[1:]
   
-  parallel = True
-  if args and args[0] == "-s":
-    args.pop(0)
-    parallel = False
+  parallel, exclude_path, exclude_name = True, set(), set()
+  while True:
+    if args[0] == "-s":
+      args.pop(0)
+      parallel = False
+    elif args[0] == "-x":
+      args.pop(0)
+      exclude_path.add(args.pop(0))
+    elif args[0] == "-X":
+      args.pop(0)
+      exclude_name.add(args.pop(0))
+    else:
+      break
     
   if len(args) < 2:
-    print "usage: %s ?-s? [index file] [path 1] ?path 2? ... ?path n?" % sys.argv[0]
+    print "usage: %s ?-s? ?-x [path exclusion]? ?-X [name exclusion]? [index file] [path 1] ?path 2? ... ?path n?" % sys.argv[0]
     sys.exit(1)
     
   try:
-    main(args[0], args[1:], parallel=parallel)
+    main(args[0], args[1:], parallel=parallel, exclude_path=exclude_path, exclude_name=exclude_name)
   except KeyboardInterrupt:
     pass

@@ -166,7 +166,7 @@ class FIndexReadTrie(ReadTrie):
       
     xlen = min(3, len(key))
     for path, file in self._get(key[:xlen]):
-      df = file.lower().encode("iso-8859-1", "replace")
+      df = file.lower().decode("utf8").encode("iso-8859-1", "replace")
       if df.find(key) != -1:
         yield path.decode("utf8"), file.decode("utf8")
 

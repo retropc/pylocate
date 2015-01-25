@@ -2,37 +2,49 @@ import multiprocessing
 import scandir
 import os
 
-def index(base, root):
-  l = len(base)  
-  batch = []
-  for root, dirs, files in scandir.walk(root):
-    root = root[l:]
-    if len(root) > 0 and root[0] == os.path.sep:
-      root = root[1:]
-
-    for filename in files:
-      batch+=[(root, filename)]
-      if len(batch) > 50:
-        yield batch
-        batch = []
-        
-  if batch:
-    yield batch
-
 class Indexer(object):
-  def __init__(self, base, paths):
+  def __init__(self, base, paths, exclude_path, exclude_name):
     self.base, self.paths = base, paths
+    self.exclude_path, self.exclude_name = set(x.lower() for x in exclude_path), set(x.lower() for x in exclude_name)
   
   def start(self):
-    pass  
+    pass
     
   def terminate(self):
     pass
+
+  def _index(self, root):
+    l = len(self.base)  
+    batch = []
+    for root, dirs, files in scandir.walk(root):
+      rootl = root.lower()
+      
+      i, l_dirs = 0, len(dirs)
+      while i < l_dirs:
+        d = dirs[i].lower()
+        if (d in self.exclude_name) or (os.path.join(rootl, d) in self.exclude_path):
+          dirs.pop(i)
+          l_dirs-=1
+        else:
+          i+=1
+      
+      root = root[l:]
+      if len(root) > 0 and root[0] == os.path.sep:
+        root = root[1:]
+      
+      for filename in files:
+        batch+=[(root, filename)]
+        if len(batch) > 50:
+          yield batch
+          batch = []
+          
+    if batch:
+      yield batch
   
 class SerialIndexer(Indexer):
   def __iter__(self):
     for path in self.paths:
-      for x in index(self.base, path):
+      for x in self._index(path):
         for y in x:
           yield y
   
@@ -64,6 +76,6 @@ class ParallelIndexer(Indexer):
         yield x
       
   def parallel_fn(self, path):
-    for batch in index(self.base, path):
+    for batch in self._index(path):
       self.queue.put(batch)
     self.queue.put(None)
