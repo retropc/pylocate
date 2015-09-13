@@ -4,7 +4,7 @@ import gtk, os, sys, trie, platform, ctypes, threading, time
 if platform.system() == "Windows":
   exc = lambda x: ctypes.windll.shell32.ShellExecuteW(0, u'open',  ctypes.c_wchar_p(x), None, None, 1)
 else:
-  exc = lambda x: os.spawnvp(os.P_NOWAIT, OPENER, ["xdg-open", x])
+  exc = lambda x: os.spawnvp(os.P_NOWAIT, "xdg-open", ["xdg-open", x])
 
 SCRIPTPATH, _ = os.path.split(sys.argv[0])
 
@@ -212,4 +212,7 @@ if __name__ == "__main__":
   if len(sys.argv) < 2:
     alert("usage: %s [index file]" % sys.argv[0])
   else:
-    main(sys.argv[1])
+    try:
+      main(sys.argv[1])
+    except KeyboardInterrupt:
+      pass

@@ -4,10 +4,16 @@ import platform
 
 INT_TYPE = "L"
 INT_S = struct.Struct(INT_TYPE)
-INT_S2 = struct.Struct(INT_TYPE + INT_TYPE)
 INT_LEN = INT_S.size
 if INT_LEN != 4:
-  raise Exception("Bad length.")
+  INT_TYPE = "I"
+  INT_S = struct.Struct(INT_TYPE)
+  INT_LEN = INT_S.size
+  if INT_LEN != 4:
+    raise Exception("Bad length.")
+
+INT_S2 = struct.Struct(INT_TYPE + INT_TYPE)
+
 U32 = INT_S.pack
 def gU32(x): return INT_S.unpack(x)[0]
 gU32x2 = INT_S2.unpack
@@ -38,7 +44,7 @@ def MMap(handle, mode, length=0):
     pos = handle.tell()
     handle.seek(0, 2)
     total_length = handle.tell()
-    if totallength < length:
+    if total_length < length:
       handle.seek(length-1, 0)
       handle.write("\x00")
     handle.seek(pos, 0)
