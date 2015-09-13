@@ -13,7 +13,10 @@ def main(indexfile, paths, parallel=True, exclude_path=set(), exclude_name=set()
   if len(paths) == 1:
     base = paths[0]
   else:
-    base = ""
+    if sys.platform == "win32":
+      base = ""
+    else:
+      base = "/"
   
   newfile = "%s.new" % indexfile
   i = trie.FIndexWriteTrie(newfile, {"base": base})
@@ -35,7 +38,7 @@ if __name__ == "__main__":
   args = sys.argv[1:]
   
   parallel, exclude_path, exclude_name = True, set(), set()
-  while True:
+  while args:
     if args[0] == "-s":
       args.pop(0)
       parallel = False
