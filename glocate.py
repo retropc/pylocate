@@ -4,6 +4,8 @@ import gtk, os, sys, trie, platform, ctypes, threading, time
 if platform.system() == "Windows":
   exc = lambda x: ctypes.windll.shell32.ShellExecuteW(0, u'open',  ctypes.c_wchar_p(x), None, None, 1)
 else:
+  import signal
+  signal.signal(signal.SIGCHLD, signal.SIG_IGN)
   exc = lambda x: os.spawnvp(os.P_NOWAIT, "xdg-open", ["xdg-open", x])
 
 SCRIPTPATH, _ = os.path.split(sys.argv[0])
