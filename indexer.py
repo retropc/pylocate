@@ -1,11 +1,17 @@
 import multiprocessing
 import scandir
 import os
+import platform
+
+if platform.system() == "Windows":
+  trans = lambda x: x.lower()
+else:
+  trans = lambda x: x
 
 class Indexer(object):
   def __init__(self, base, paths, exclude_path, exclude_name):
     self.base, self.paths = base, paths
-    self.exclude_path, self.exclude_name = set(x.lower() for x in exclude_path), set(x.lower() for x in exclude_name)
+    self.exclude_path, self.exclude_name = set(trans(x) for x in exclude_path), set(trans(x) for x in exclude_name)
   
   def start(self):
     pass
@@ -17,20 +23,21 @@ class Indexer(object):
     l = len(self.base)  
     batch = []
     for root, dirs, files in scandir.walk(root):
-      rootl = root.lower()
+      rootl = trans(root)
+
+      root = root[l:]
+      if len(root) > 0 and root[0] == os.path.sep:
+        root = root[1:]
       
       i, l_dirs = 0, len(dirs)
       while i < l_dirs:
-        d = dirs[i].lower()
+        d = trans(dirs[i])
         if (d in self.exclude_name) or (os.path.join(rootl, d) in self.exclude_path):
           dirs.pop(i)
           l_dirs-=1
         else:
+          yield [(root, dirs[i] + "/")]
           i+=1
-      
-      root = root[l:]
-      if len(root) > 0 and root[0] == os.path.sep:
-        root = root[1:]
       
       for filename in files:
         batch+=[(root, filename)]
