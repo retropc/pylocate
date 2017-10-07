@@ -37,6 +37,7 @@ class PyIndexGUI:
     self.__statusbar = builder.get_object("statusbar")
     self.__tag = 0
     self.__last_tag_seen = -1
+    self.__timer = False
     self.__setup_treeview()
 
   def __setup_treeview(self):
@@ -99,11 +100,20 @@ class PyIndexGUI:
   def on_results_cursor_changed(self, widget, data=None):
     row = self.__treeview.get_selection().get_selected_rows()[1][0]
     self.set_statusbar(self.get_full_path(row))
-    
+
+  def __clear_if_no_results(self):
+    self.__timer = False
+    if self.__tag != self.__last_tag_seen:
+      self.__last_tag_seen = self.__tag
+      self.clear()
+
   def on_search_changed(self, widget, data=None):
     t = widget.get_text()
 
     self.__tag+=1
+    if not self.__timer:
+      self.__timer = True
+      gtk.timeout_add(100, self.__clear_if_no_results)
     self.__index_worker.search(t, self.__tag)
 
   def add(self, data, tag):
