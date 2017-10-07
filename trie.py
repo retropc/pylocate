@@ -60,6 +60,9 @@ class SearchTrie(object):
   
   def close(self):
     self._f.close()
+
+  def fileno(self):
+    return self._f.fileno()
     
 class HeaderTrie(SearchTrie):
   HEADER_LEN = 1024
@@ -119,8 +122,9 @@ class WriteTrie(HeaderTrie):
     super(WriteTrie, self).close()
     
 class ReadTrie(HeaderTrie):
-  def __init__(self, filename, codec=DEFAULT_CODEC):
-    f = MMapOpen(filename, "r")
+  def __init__(self, filename, codec=DEFAULT_CODEC, f=None):
+    if f is None:
+      f = MMapOpen(filename, "r")
     self._m = MMap(f, "r")
     l = datalist.ReadDataList(f, self._m, codec, offset=self.TRIE_LEN + self.HEADER_LEN)
     super(ReadTrie, self).__init__(f, l, offset=self.HEADER_LEN)
@@ -160,15 +164,23 @@ class FIndexWriteTrie(WriteTrie):
       
 class FIndexReadTrie(ReadTrie):
   def __getitem__(self, key):
+    return self.get(key)
+
+  def get(self, key, terminate_check=None):
+    if terminate_check is None:
+      terminate_check = lambda: False
+
     key = key.lower().encode("iso-8859-1", "replace")
     if not key:
       return
-      
+
     xlen = min(3, len(key))
     for path, file in self._get(key[:xlen]):
       df = file.lower().decode("utf8").encode("iso-8859-1", "replace")
       if df.find(key) != -1:
         yield path.decode("utf8"), file.decode("utf8")
+      if terminate_check():
+        break
 
 def main():
   a = FIndexWriteTrie("test", dict(fish="mooooo", zz="moaefawefawef"))

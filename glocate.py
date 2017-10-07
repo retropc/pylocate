@@ -1,100 +1,30 @@
 #!/usr/bin/env python
-import gtk, os, sys, trie, platform, ctypes, threading, time
+import os, sys, trie, platform, ctypes
+
+MAX_RESULTS = 200
 
 if platform.system() == "Windows":
   exc = lambda x: ctypes.windll.shell32.ShellExecuteW(0, u'open',  ctypes.c_wchar_p(x), None, None, 1)
+  from indexworker_generic import IndexWorkerGeneric as IndexWorker
 else:
   import signal
-  signal.signal(signal.SIGCHLD, signal.SIG_IGN)
-  exc = lambda x: os.spawnvp(os.P_NOWAIT, "xdg-open", ["xdg-open", x])
+  SIGNAL_SET = False
+  def exc(x):
+    global SIGNAL_SET
+    if not SIGNAL_SET:
+      SIGNAL_SET = True
+      signal.signal(signal.SIGCHLD, signal.SIG_IGN)
+    os.spawnvp(os.P_NOWAIT, "xdg-open", ["xdg-open", x])
+
+  from indexworker_unix import IndexWorkerUnix as IndexWorker
+#from indexworker_generic import IndexWorkerGeneric as IndexWorker
 
 SCRIPTPATH, _ = os.path.split(sys.argv[0])
 
-class IndexThread(threading.Thread):
-  def __init__(self, index, max=500):
-    threading.Thread.__init__(self)
-    self.setDaemon(True)
-    self.__index = index
-    self.__terminated = False
-    self.__stopped = False
-    self.__cv = threading.Condition()
-    self.__data = None
-    self.__max = max
-    
-  def wakeup(self, data):
-    self.__cv.acquire()
-    try:
-      self.__data = data
-      self.__stopped = True
-      self.__cv.notify()
-    finally:
-      self.__cv.release()
-    
-  def run(self):
-    while not self.__terminated:
-      self.__cv.acquire()
-      try:
-        while self.__data == None and not self.__terminated:
-          self.__cv.wait()
-          
-        if self.__terminated:
-          return
-          
-        self.__stopped = False
-        data = self.__data
-        self.__data = None
-      finally:
-        self.__cv.release()
-        
-      self.work(data)
-      
-  def terminate(self):
-    self.__cv.acquire()
-    try:
-      self.__addfn = lambda x: 0
-      self.__terminated = True    
-      self.__stopped = True
-      self.__cv.notify()
-    finally:
-      self.__cv.release()
-    
-  def stopped(self):
-    self.__cv.acquire()
-    try:
-      return self.__stopped
-    finally:
-      self.__cv.release()
-      
-  def work(self, data):
-    if data == "":
-      return
-
-    t = time.time()
-    l = []
-    first = True
-    
-    for i, x in enumerate(self.__index[data]):
-      if self.stopped():
-        return
-      if i > self.__max:
-        break
-        
-      l.append(x)
-      nt = time.time()
-      # only add stuff if there's been an noticeable time difference
-      if nt - t > 0.1 or first and len(l) > 10:
-        t = nt
-        self.addfn(l, first)
-        first = False
-        l = []
-        
-    self.addfn(l, first)
-    
 class PyIndexGUI:
-  def __init__(self, index, indexthread):
-    self.__index = index
-    self.__indexthread = indexthread
-    self.__indexthread.addfn = self.add
+  def __init__(self, i, index_worker):
+    self.__base = i.metadata["base"]
+    self.__index_worker = index_worker
     self.__data = []
 
     builder = gtk.Builder()
@@ -105,7 +35,8 @@ class PyIndexGUI:
     self.__window = builder.get_object("window")
     self.__treeview = builder.get_object("results")
     self.__statusbar = builder.get_object("statusbar")
-    
+    self.__tag = 0
+    self.__last_tag_seen = -1
     self.__setup_treeview()
 
   def __setup_treeview(self):
@@ -136,7 +67,7 @@ class PyIndexGUI:
       self.__window.destroy()
 
   def get_full_path(self, column):
-    return os.path.join(self.__index.metadata["base"], self.__data[column[0]])
+    return os.path.join(self.__base, self.__data[column[0]])
 
   def on_results_row_activated(self, widget, column, data=None):
     exc(self.get_full_path(column))
@@ -172,14 +103,16 @@ class PyIndexGUI:
   def on_search_changed(self, widget, data=None):
     t = widget.get_text()
 
-    self.__indexthread.wakeup(t)
-    if t == "":
-      self.clear()
-    
-  def add(self, data, first):
+    self.__tag+=1
+    self.__index_worker.search(t, self.__tag)
+
+  def add(self, data, tag):
     gtk.gdk.threads_enter()
     try:
-      if first:
+      if self.__tag != tag:
+        return
+      if self.__tag != self.__last_tag_seen:
+        self.__last_tag_seen = self.__tag
         self.clear()
       
       for x in data:
@@ -197,7 +130,10 @@ def alert(text):
 def main(indexfn):
   i = trie.FIndexReadTrie(indexfn)
   try:
-    it = IndexThread(i)
+    def callback(results, tag):
+      window.add(results, tag)
+
+    it = IndexWorker(i, callback, max_results=MAX_RESULTS)
     it.start()
     try:
       window = PyIndexGUI(i, it)
@@ -206,14 +142,17 @@ def main(indexfn):
       gtk.main()
     finally:
       it.terminate()
-      it.join()
   finally:
     i.close()
     
 if __name__ == "__main__":
   if len(sys.argv) < 2:
     alert("usage: %s [index file]" % sys.argv[0])
+  elif sys.argv[1] == "--child":
+    import indexworker_unix
+    indexworker_unix.child(sys.argv[2:])
   else:
+    import gtk
     try:
       main(sys.argv[1])
     except KeyboardInterrupt:
