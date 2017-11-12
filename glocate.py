@@ -2,19 +2,30 @@
 import os, sys, trie, platform, ctypes
 
 MAX_RESULTS = 200
+EDITOR = os.environ.get("PYLOCATE_EDITOR")
 
 if platform.system() == "Windows":
   exc = lambda x: ctypes.windll.shell32.ShellExecuteW(0, u'open',  ctypes.c_wchar_p(x), None, None, 1)
+  exc_editor = lambda x: ctypes.windll.shell32.ShellExecuteW(0, u'open', unicode(EDITOR), ctypes.c_wchar_p(x), None, 1)
   from indexworker_generic import IndexWorkerGeneric as IndexWorker
 else:
   import signal
   SIGNAL_SET = False
-  def exc(x):
+  LAUNCHER = os.environ.get("PYLOCATE_LAUNCHER", "xdg-open")
+
+  def pre_exec():
     global SIGNAL_SET
     if not SIGNAL_SET:
       SIGNAL_SET = True
       signal.signal(signal.SIGCHLD, signal.SIG_IGN)
-    os.spawnvp(os.P_NOWAIT, "xdg-open", ["xdg-open", x])
+
+  def exc(x):
+    pre_exec()
+    os.spawnvp(os.P_NOWAIT, LAUNCHER, [LAUNCHER, x])
+
+  def exc_editor(x):
+    pre_exec()
+    os.spawnvp(os.P_NOWAIT, EDITOR, [EDITOR, x])
 
   from indexworker_unix import IndexWorkerUnix as IndexWorker
 #from indexworker_generic import IndexWorkerGeneric as IndexWorker
@@ -85,7 +96,10 @@ class PyIndexGUI:
     p = self.get_full_path(tree[0])
     if event.button == 3:
       p = os.path.dirname(p)
-    exc(p)
+      exc(p)
+    if event.button == 2:
+      exc_editor(p)
+      self.__window.destroy()
 
   def set_statusbar(self, text):
     cid = self.__statusbar.get_context_id("Status bar")
