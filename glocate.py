@@ -46,10 +46,13 @@ class PyIndexGUI:
     self.__window = builder.get_object("window")
     self.__treeview = builder.get_object("results")
     self.__statusbar = builder.get_object("statusbar")
+    self.__search = builder.get_object("search")
+#    self.__spinner = builder.get_object("spinner")
     self.__tag = 0
     self.__last_tag_seen = -1
     self.__timer = False
     self.__setup_treeview()
+    self.__set_spinner_active(False)
 
   def __setup_treeview(self):
     t = self.__treeview
@@ -128,7 +131,14 @@ class PyIndexGUI:
     if not self.__timer:
       self.__timer = True
       gtk.timeout_add(100, self.__clear_if_no_results)
+    self.__set_spinner_active(True)
     self.__index_worker.search(t, self.__tag)
+
+  def __set_spinner_active(self, value):
+    if value:
+      self.__search.modify_bg(gtk.STATE_NORMAL, gtk.gdk.Color(50000, 100000, 0))
+    else:
+      self.__search.modify_bg(gtk.STATE_NORMAL, gtk.gdk.Color(0, 150000, 0))
 
   def add(self, data, tag):
     gtk.gdk.threads_enter()
@@ -139,6 +149,9 @@ class PyIndexGUI:
         self.__last_tag_seen = self.__tag
         self.clear()
       
+      if data == True:
+        self.__set_spinner_active(False)
+        return
       for x in data:
         self.__data.append(os.path.join(*x))
         self.__listmodel.append(x[::-1])
