@@ -2,6 +2,7 @@ import multiprocessing
 import scandir
 import os
 import platform
+import traceback
 
 if platform.system() == "Windows":
   trans = lambda x: x.lower()
@@ -72,17 +73,22 @@ class ParallelIndexer(Indexer):
   def __iter__(self):
     remaining = len(self.paths)
     while True:
-      batch = self.queue.get()
-      if batch is None:
+      complete, data = self.queue.get()
+      if complete:
+        if data is not None:
+          raise Exception(data)
         remaining-=1
         if not remaining:
           break
         continue
       
-      for x in batch:
+      for x in data:
         yield x
       
   def parallel_fn(self, path):
-    for batch in self._index(path):
-      self.queue.put(batch)
-    self.queue.put(None)
+    try:
+      for batch in self._index(path):
+        self.queue.put((False, batch))
+      self.queue.put((True, None))
+    except Exception, e:
+      self.queue.put((True, traceback.format_exc()))
