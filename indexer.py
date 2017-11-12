@@ -3,11 +3,23 @@ import scandir
 import os
 import platform
 import traceback
+import codecs
 
 if platform.system() == "Windows":
   trans = lambda x: x.lower()
 else:
   trans = lambda x: x
+
+def utf8_iso8859_1(data, table=dict((x, x.decode("iso-8859-1")) for x in map(chr, range(0, 256)))):
+  return (table.get(data.object[data.start]), data.start+1)
+
+codecs.register_error("mixed-iso-8859-1", utf8_iso8859_1)
+
+def decode(x):
+  try:
+    return x.decode("utf-8", "mixed-iso-8859-1")
+  except UnicodeDecodeError:
+    return x.decode("iso-8859-1", "ignore")
 
 class Indexer(object):
   def __init__(self, base, paths, exclude_path, exclude_name):
@@ -23,10 +35,10 @@ class Indexer(object):
   def _index(self, root):
     l = len(self.base)  
     batch = []
-    for root, dirs, files in scandir.walk(root):
+    for root, dirs, files in scandir.walk(bytes(root)):
       rootl = trans(root)
 
-      root = root[l:]
+      root = decode(root)[l:]
       if len(root) > 0 and root[0] == os.path.sep:
         root = root[1:]
       
@@ -37,11 +49,11 @@ class Indexer(object):
           dirs.pop(i)
           l_dirs-=1
         else:
-          yield [(root, dirs[i] + "/")]
+          yield [(root, decode(dirs[i]) + "/")]
           i+=1
       
       for filename in files:
-        batch+=[(root, filename)]
+        batch+=[(root, decode(filename))]
         if len(batch) > 50:
           yield batch
           batch = []
